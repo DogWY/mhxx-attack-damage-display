@@ -11,6 +11,12 @@ static uint8_t resist[3];
 static bool expected_highlight = true;
 static bool missing_zone;
 static unsigned lookup_count;
+static int monster_hp = 100;
+
+bool mhgu_target_alive(uintptr_t target) {
+    assert(target == monster);
+    return monster_hp > 0;
+}
 
 const uint8_t *mhgu_hitzone_values(uintptr_t target, unsigned index) {
     assert(target == monster && index == 7);
@@ -35,14 +41,19 @@ void mhgu_publish_hit(const Contact *contact, int damage) {
     ++count;
 }
 
-enum { BASIC, NESTED, SIMULTANEOUS };
+enum { BASIC, NESTED, SIMULTANEOUS, KILLING_HIT };
 unsigned mhgu_original_dispatch(uintptr_t manager, const uint8_t *attack,
                                 uintptr_t target, const Point *impact,
                                 uintptr_t axis_start, uintptr_t axis_end,
                                 const uint8_t *zone, uintptr_t flags) {
     (void)attack;
     assert(manager == 11 && axis_start == 17 && axis_end == 19);
-    if (flags == NESTED) {
+    if (flags == KILLING_HIT) {
+        monster_hp = 0;
+        // A follow-up contact during the lethal hit must mask the outer hit.
+        assert(mhgu_contact_dispatch(manager, attack, target, impact,
+                                     axis_start, axis_end, zone, BASIC) == 421);
+    } else if (flags == NESTED) {
         uint8_t palico[0x74] = {0};
         assert(mhgu_contact_dispatch(manager, palico, target, impact,
                                      axis_start, axis_end, zone, BASIC) == 421);
@@ -137,4 +148,11 @@ int main(void) {
     expected_highlight = false;
     dispatch(direct, BASIC);
     assert(count == 4);
+    dispatch(direct, KILLING_HIT);
+    assert(count == 5);
+    dispatch(direct, BASIC);
+    assert(count == 5);
+    monster_hp = 100;
+    dispatch(direct, BASIC);
+    assert(count == 6);
 }

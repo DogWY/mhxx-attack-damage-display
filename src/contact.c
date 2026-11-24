@@ -94,7 +94,7 @@ unsigned mhgu_contact_dispatch(uintptr_t manager, const uint8_t *attack,
     ActiveHit hit = {0};
     uintptr_t owner = attack_owner(attack);
     if (owner && target && impact && zone && zone[8] < 8 &&
-        owner == mhgu_current_player()) {
+        owner == mhgu_current_player() && mhgu_target_alive(target)) {
         hit.contact.target = target;
         hit.contact.slot = zone[8];
         hit.contact.local = true;

@@ -31,6 +31,12 @@ static void lock_display(void) {
         __asm__ volatile("yield");
 }
 
+bool mhgu_target_alive(uintptr_t target) {
+    // Switch GU 1.4.0: the HP setter at main+0x9a764 uses these fields.
+    uintptr_t stats = *(const uintptr_t *)(target + 0x1428);
+    return stats && *(const int32_t *)(stats + 0x370) > 0;
+}
+
 const uint8_t *mhgu_hitzone_values(uintptr_t target, unsigned index) {
     typedef const uint8_t *(*Lookup)(uintptr_t, unsigned);
     return ((Lookup)(game_base() + 0xbab60))(target, index);

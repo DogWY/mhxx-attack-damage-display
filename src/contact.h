@@ -13,6 +13,7 @@ typedef int MhguCommit(uintptr_t target, unsigned part, int raw, int mode);
 extern MhguDispatch mhgu_original_dispatch;
 extern MhguCommit mhgu_original_commit;
 uintptr_t mhgu_current_player(void);
+bool mhgu_target_alive(uintptr_t target);
 const uint8_t *mhgu_hitzone_values(uintptr_t target, unsigned index);
 bool mhgu_hit_highlight(const uint8_t *attack, const uint8_t *player,
                         uintptr_t target, unsigned zone_index);
