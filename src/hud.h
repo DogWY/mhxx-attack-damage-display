@@ -27,7 +27,7 @@ void hud_number(const HudFrame *frame, float x, float y, unsigned value,
 
 // Snapshot on the game thread while its active camera is live.
 bool hud_view_projection(uintptr_t main_base, float out[16]);
-// Advance on a single graphics thread. Initialize *previous to zero.
-float hud_frame_seconds(uintptr_t main_base, uint64_t *previous);
+uint64_t hud_tick(uintptr_t main_base);
+uint32_t hud_ticks_per_second(uintptr_t main_base);
 
 #endif

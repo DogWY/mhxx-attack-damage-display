@@ -103,6 +103,11 @@ static void test_highlight(void) {
     assert(!mhgu_hit_highlight(attack, hunter, monster, 7));
     attack[0x40] = 0;
     assert(mhgu_hit_highlight(attack, hunter, monster, 7));
+    resist[0] = 60;
+    resist[1] = 0;
+    assert(!mhgu_hit_highlight(attack, hunter, monster, 7));
+    attack[0x40] = 2;
+    assert(mhgu_hit_highlight(attack, hunter, monster, 7));
 
     // 0x20 takes precedence over 0x10000. A weighted tie selects cut;
     // both products are large but the raw cut value still falls below 45.

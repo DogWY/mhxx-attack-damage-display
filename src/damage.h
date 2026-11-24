@@ -15,7 +15,7 @@ typedef struct {
 typedef struct {
     Point world;
     unsigned damage;
-    float age;
+    uint64_t published_tick;
     unsigned lane;
     bool active;
     bool highlight;
@@ -30,7 +30,8 @@ typedef struct {
 typedef void (*DrawNumber)(float x, float y, unsigned damage, float alpha, bool highlight);
 void display_reset(Display *display);
 void display_hit(Display *display, const Contact *contact, uintptr_t target,
-                 unsigned slot, int damage);
-void display_frame(Display *display, float seconds, const float view_projection[16],
+                 unsigned slot, int damage, uint64_t published_tick);
+void display_frame(Display *display, uint64_t now, uint32_t ticks_per_second,
+                   const float view_projection[16],
                    float width, float height, DrawNumber draw);
 #endif

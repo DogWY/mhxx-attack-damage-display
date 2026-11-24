@@ -48,10 +48,36 @@ static int scale_edge(int units, int height) {
     return (units * height + 9) / 19;
 }
 
+typedef struct { int first, end; } RowRun;
+
+// A texture clear replaces the destination. Reveal the scene through an
+// ordered mask anchored to the moving number, shared by its ink and outline.
+// 16 bands keep the cost independent of resolution. Merge adjacent visible
+// bands so a solid stroke still takes a single clear at full opacity.
+static int visible_rows(RowRun runs[8], int height, int stroke, float opacity) {
+    static const uint8_t rank[16] = {0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15};
+    int level = (int)(opacity * 16 + 0.5f);
+    if (level == 16) {
+        runs[0] = (RowRun){-stroke, height + stroke};
+        return 1;
+    }
+    int count = 0, extent = height + 2 * stroke;
+    int bands = extent < 16 ? extent : 16;
+    for (int i = 0; i < bands; ++i) {
+        if (rank[i] >= level) continue;
+        int first = (extent < 16 ? i : extent * i / 16) - stroke;
+        int end = (extent < 16 ? i + 1 : extent * (i + 1) / 16) - stroke;
+        if (count && runs[count - 1].end == first)
+            runs[count - 1].end = end;
+        else
+            runs[count++] = (RowRun){first, end};
+    }
+    return count;
+}
+
 void hud_number(const HudFrame *frame, float x, float y, unsigned value,
                 float opacity, bool highlight) {
-    if (!(opacity > 0) || !(x >= 0 && x <= frame->width) ||
-        !(y >= 0 && y <= frame->height)) return;
+    if (!(opacity > 0)) return;
     if (opacity > 1) opacity = 1;
     enum { tracking = 2 };
     const Digit *sequence[10];
@@ -67,14 +93,21 @@ void hud_number(const HudFrame *frame, float x, float y, unsigned value,
     if (height < 1) height = 1;
     int stroke = (height + 8) / 16;
     if (stroke < 1) stroke = 1;
-    int left = (int)x - scale_edge(width - tracking, height) / 2;
-    int top = (int)y - height / 2;
+    int pixel_width = scale_edge(width - tracking, height);
+    int half_width = pixel_width / 2, half_height = height / 2;
+    // Clip the whole number including its outline. Check the floating-point
+    // anchor before conversion so nonfinite and very distant points are safe.
+    if (!(x > -(pixel_width - half_width + stroke) && x < frame->width + half_width + stroke &&
+          y > -(height - half_height + stroke) && y < frame->height + half_height + stroke))
+        return;
+    RowRun rows[8];
+    int row_count = visible_rows(rows, height, stroke, opacity);
+    if (!row_count) return;
+    int left = (int)x - half_width;
+    int top = (int)y - half_height;
     const float outline[4] = {0.0392f, 0.0392f, 0.0392f, 1};
-    const float fill[4] = {
-        opacity,
-        opacity * (highlight ? 220.0f/255.0f : 1.0f),
-        opacity * (highlight ? 80.0f/255.0f : 1.0f), 1
-    };
+    const float fill[4] = {1, highlight ? 220.0f/255.0f : 1,
+                           highlight ? 80.0f/255.0f : 1, 1};
     for (int pass = 0; pass < 2; ++pass) {
         int border = pass == 0 ? stroke : 0;
         int pen = 0;
@@ -87,8 +120,15 @@ void hud_number(const HudFrame *frame, float x, float y, unsigned value,
                 int y0 = scale_edge(r.y, height);
                 int y1 = scale_edge(r.y + r.h, height);
                 if (x0 == x1 || y0 == y1) continue;
-                rectangle(frame, left+x0-border, top+y0-border,
-                          x1-x0+2*border, y1-y0+2*border, pass ? fill : outline);
+                for (int j = 0; j < row_count; ++j) {
+                    int first = rows[j].first, end = rows[j].end;
+                    if (first >= y1 + border) break;
+                    if (first < y0 - border) first = y0 - border;
+                    if (end > y1 + border) end = y1 + border;
+                    if (end > first)
+                        rectangle(frame, left+x0-border, top+first,
+                                  x1-x0+2*border, end-first, pass ? fill : outline);
+                }
             }
             pen += digit->width + tracking;
         }
@@ -131,16 +171,12 @@ bool hud_view_projection(uintptr_t base, float out[16]) {
     return true;
 }
 
-float hud_frame_seconds(uintptr_t base, uint64_t *previous) {
+uint64_t hud_tick(uintptr_t base) {
     typedef uint64_t (*GetTick)(void);
-    uint64_t now = ((GetTick)(base + 0x13f1af8))();
-    uint64_t last = *previous;
-    *previous = now;
-    if (!last || now <= last) return 0;
-    uint32_t frequency = (uint32_t)((GetTick)(base + 0x13f1b04))();
-    if (!frequency) return 0;
-    uint64_t elapsed = now - last;
-    // One second already expires every number in the display.
-    if (elapsed >= frequency) return 1;
-    return (float)(uint32_t)elapsed / (float)frequency;
+    return ((GetTick)(base + 0x13f1af8))();
+}
+
+uint32_t hud_ticks_per_second(uintptr_t base) {
+    typedef uint64_t (*GetFrequency)(void);
+    return (uint32_t)((GetFrequency)(base + 0x13f1b04))();
 }

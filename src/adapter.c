@@ -13,7 +13,6 @@ static uintptr_t game_base(void) {
 
 static Display display;
 static atomic_flag display_lock = ATOMIC_FLAG_INIT;
-static uint64_t last_tick;
 static uintptr_t current_actor;
 static uint8_t current_area;
 static float camera[16];
@@ -74,7 +73,7 @@ void mhgu_publish_hit(const Contact *contact, int damage) {
         current_area = area;
     }
     has_hits = true;
-    display_hit(&display, contact, contact->target, contact->slot, damage);
+    display_hit(&display, contact, contact->target, contact->slot, damage, hud_tick(game_base()));
     atomic_flag_clear_explicit(&display_lock, memory_order_release);
 }
 
@@ -84,9 +83,8 @@ int mhgu_input_update(void *pad) {
     lock_display();
     if (has_hits) {
         if (current_actor == mhgu_current_player() &&
-            *(const uint8_t *)(current_actor + 0x1054) == current_area &&
-            hud_view_projection(main, camera)) {
-            camera_valid = true;
+            *(const uint8_t *)(current_actor + 0x1054) == current_area) {
+            camera_valid = hud_view_projection(main, camera);
         } else {
             display_reset(&display);
             has_hits = camera_valid = false;
@@ -108,23 +106,23 @@ uint64_t mhgu_end_frame(void *window) {
     typedef uint64_t (*EndRecording)(void *);
     EndRecording end = *(EndRecording *)(main + 0x191fc4c);
     void *commands = *(void **)((char *)window + 376);
-    if (!atomic_load_explicit(&has_hits, memory_order_acquire)) {
-        last_tick = 0;
+    if (!atomic_load_explicit(&has_hits, memory_order_acquire))
         return end(commands);
-    }
     HudFrame frame;
     if (hud_begin(main, commands, &frame)) {
         // The present callbacks are the mutually exclusive single/dual-thread
         // render paths. The scratch glyph list belongs only to that presenter.
-        float seconds = hud_frame_seconds(main, &last_tick);
+        uint32_t frequency = hud_ticks_per_second(main);
         lock_display();
         frame_count = 0;
         if (has_hits) {
-            display_frame(&display, seconds, camera_valid ? camera : 0, frame.width,
-                          frame.height, collect_number);
+            display_frame(&display, hud_tick(main), frequency, camera_valid ? camera : 0,
+                          frame.width, frame.height, collect_number);
             bool remaining = false;
             for (unsigned i = 0; i < NUMBER_CAPACITY; ++i)
                 remaining |= display.numbers[i].active;
+            // Input stops sampling while idle. The next hit needs a fresh snapshot.
+            if (!remaining) camera_valid = false;
             has_hits = remaining;
         }
         atomic_flag_clear_explicit(&display_lock, memory_order_release);

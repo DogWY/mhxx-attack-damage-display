@@ -70,10 +70,8 @@ bool mhgu_hit_highlight(const uint8_t *attack, const uint8_t *player,
         impact_weight = player[0x2b71];
         restrict_type = (player[0x13cc] & 4) != 0;
     }
-    if (restrict_type) {
-        if (attack[0x40] & 2) impact_weight = 0;
-        else cut_weight = 0;
-    }
+    if (restrict_type)
+        return zone[(attack[0x40] & 2) ? 0 : 1] >= 45;
     unsigned column = cut_weight * zone[0] < impact_weight * zone[1] ? 1 : 0;
     return zone[column] >= 45;
 }
